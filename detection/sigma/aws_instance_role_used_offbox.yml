@@ -1,0 +1,50 @@
+title: EC2 인스턴스 역할 자격증명의 외부(오프-인스턴스) 사용
+id: 6f1d2a10-0001-4a11-9c01-cloudirlab001
+status: experimental
+description: >
+  EC2 인스턴스 역할의 임시 자격증명이 인스턴스/AWS 내부가 아닌 외부 IP에서 사용되면
+  자격증명 탈취 후 오용을 의심한다. 본 재현 환경의 핵심 탐지 신호.
+  프로덕션에서는 GuardDuty의 InstanceCredentialExfiltration.OutsideAWS 가 이 판정을 자동화한다.
+references:
+  - https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_unauthorized.html
+logsource:
+  product: aws
+  service: cloudtrail
+detection:
+  selection:
+    userIdentity.arn|contains: 'assumed-role/cloudir-ec2-role'
+  filter_internal:
+    sourceIPAddress|startswith:
+      - '10.'
+      - '172.16.'
+      - '172.17.'
+      - '172.18.'
+      - '172.19.'
+      - '172.20.'
+      - '172.21.'
+      - '172.22.'
+      - '172.23.'
+      - '172.24.'
+      - '172.25.'
+      - '172.26.'
+      - '172.27.'
+      - '172.28.'
+      - '172.29.'
+      - '172.30.'
+      - '172.31.'
+      - '192.168.'
+  filter_aws_service:
+    sourceIPAddress|endswith: '.amazonaws.com'
+  condition: selection and not (filter_internal or filter_aws_service)
+fields:
+  - eventTime
+  - eventName
+  - sourceIPAddress
+  - userAgent
+falsepositives:
+  - 인스턴스가 퍼블릭 IP로 아웃바운드 호출하는 정상 케이스(화이트리스트 필요)
+level: high
+tags:
+  - attack.credential_access
+  - attack.t1552.005
+  - attack.t1078.004

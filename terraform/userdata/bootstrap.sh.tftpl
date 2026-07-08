@@ -1,0 +1,58 @@
+#!/bin/bash
+set -euxo pipefail
+
+# 앱 버전 해시(변경 시 user_data가 바뀌어 인스턴스가 교체되고 앱을 재배포함): ${app_etag}
+
+# ---------- Node.js 20 설치 (AL2023). aws-cli v2는 AL2023에 기본 설치됨. ----------
+dnf install -y nodejs20 nodejs20-npm tar unzip
+
+# ---------- 비권한 서비스 계정 ----------
+id nextjs &>/dev/null || useradd -r -m -d /opt/webapp -s /usr/sbin/nologin nextjs
+mkdir -p /opt/webapp /var/log/webapp
+chown -R nextjs:nextjs /opt/webapp /var/log/webapp
+
+# ---------- 앱 번들 내려받기 (인스턴스 프로파일 자격증명) ----------
+aws s3 cp "s3://${deploy_bucket}/${deploy_key}" /tmp/webapp.zip --region "${region}"
+rm -rf /opt/webapp/app && mkdir -p /opt/webapp/app
+unzip -o /tmp/webapp.zip -d /opt/webapp/app
+chown -R nextjs:nextjs /opt/webapp
+
+# ---------- 빌드 (nextjs 사용자로) ----------
+sudo -u nextjs -H bash -c 'cd /opt/webapp/app && npm ci && npm run build'
+# standalone 서버는 정적 자산을 옆에 복사해야 UI가 정상 로드된다.
+sudo -u nextjs -H bash -c 'cp -r /opt/webapp/app/.next/static /opt/webapp/app/.next/standalone/.next/static'
+
+# ---------- systemd 서비스 (비권한 nextjs, 포트 80은 CAP_NET_BIND_SERVICE로 바인딩) ----------
+# 앱을 root가 아닌 nextjs로 실행한다. 따라서 RCE 시점 권한은 nextjs(uid != 0)이며,
+# root 획득에는 별도의 로컬 권한상승(아래 sudoers 오설정)이 필요하다.
+cat > /etc/systemd/system/nextjs.service <<'UNIT'
+[Unit]
+Description=Cloudir Ops Portal (Next.js, lab only)
+After=network.target
+
+[Service]
+User=nextjs
+WorkingDirectory=/opt/webapp/app
+Environment=NODE_ENV=production
+Environment=PORT=80
+Environment=HOSTNAME=0.0.0.0
+Environment=ACCESS_LOG=/var/log/webapp/access.log
+ExecStart=/usr/bin/node /opt/webapp/app/.next/standalone/server.js
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+# ---------- 의도적 취약: sudo NOPASSWD 오설정 (로컬 권한상승 벡터) ----------
+# 운영 편의를 가장한 흔한 실수. nextjs 계정이 /usr/bin/find를 root로 실행할 수 있어
+# GTFOBins 방식(sudo find ... -exec /bin/sh -p ...)으로 root를 획득할 수 있다.
+# 하드닝: 이 파일 제거.
+cat > /etc/sudoers.d/nextjs-maint <<'SUDO'
+nextjs ALL=(ALL) NOPASSWD: /usr/bin/find
+SUDO
+chmod 440 /etc/sudoers.d/nextjs-maint
+
+systemctl daemon-reload
+systemctl enable --now nextjs

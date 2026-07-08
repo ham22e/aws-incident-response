@@ -1,0 +1,6 @@
+id,name,email,card_last4,notes
+1,SYNTHETIC USER 001,fake001@example.invalid,0000,DUMMY DATA - NOT REAL
+2,SYNTHETIC USER 002,fake002@example.invalid,0000,DUMMY DATA - NOT REAL
+3,SYNTHETIC USER 003,fake003@example.invalid,0000,DUMMY DATA - NOT REAL
+4,SYNTHETIC USER 004,fake004@example.invalid,0000,DUMMY DATA - NOT REAL
+5,SYNTHETIC USER 005,fake005@example.invalid,0000,DUMMY DATA - NOT REAL

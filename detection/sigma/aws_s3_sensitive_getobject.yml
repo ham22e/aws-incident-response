@@ -1,0 +1,31 @@
+title: 인스턴스 역할에 의한 민감 S3 객체 접근(유출 의심)
+id: 6f1d2a10-0002-4a11-9c01-cloudirlab002
+status: experimental
+description: >
+  EC2 인스턴스 역할이 민감 버킷의 객체를 GetObject 하면 데이터 유출을 의심한다.
+  CloudTrail S3 데이터 이벤트 로깅이 켜져 있어야 탐지 가능하다.
+logsource:
+  product: aws
+  service: cloudtrail
+detection:
+  selection:
+    eventSource: 's3.amazonaws.com'
+    eventName:
+      - 'GetObject'
+      - 'ListObjects'
+      - 'ListObjectsV2'
+    userIdentity.arn|contains: 'assumed-role/cloudir-ec2-role'
+    requestParameters.bucketName|contains: 'cloudir-sensitive'
+  condition: selection
+fields:
+  - eventTime
+  - eventName
+  - sourceIPAddress
+  - requestParameters.bucketName
+  - requestParameters.key
+falsepositives:
+  - 인스턴스 워크로드가 정상적으로 해당 버킷을 읽는 경우
+level: high
+tags:
+  - attack.collection
+  - attack.t1530

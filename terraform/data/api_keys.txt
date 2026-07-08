@@ -1,0 +1,4 @@
+# SYNTHETIC / DUMMY credentials for this isolated environment only. These are not real keys.
+service_a_api_key = DUMMY-AAAA-0000-NOT-REAL
+service_b_token   = DUMMY-BBBB-0000-NOT-REAL
+db_password       = DUMMY-not-a-real-password

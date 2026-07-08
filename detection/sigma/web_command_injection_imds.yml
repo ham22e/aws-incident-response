@@ -1,0 +1,47 @@
+title: CVE-2025-29927 미들웨어 우회 + 진단 엔드포인트 command injection / IMDS 조회
+id: 6f1d2a10-0003-4a11-9c01-cloudirlab003
+status: experimental
+description: >
+  Next.js 진단 API(/api/internal/diagnostics)에 대해 (1) x-middleware-subrequest 헤더가
+  위조되어 미들웨어 인증이 우회되거나(CVE-2025-29927), (2) host 파라미터에 셸 메타문자·IMDS
+  (169.254.169.254) 조회·privesc(sudo find)·로컬 자격증명 덤프(/etc/shadow)가 포함되면
+  인증 우회 + command injection + 권한상승 + 자격증명 탈취 시도로 본다.
+  host 웹 access log(app/webapp lib/accesslog.ts: host="..." mws="..." 필드) 대상.
+logsource:
+  category: webserver
+  product: nextjs_webapp
+detection:
+  selection_endpoint:
+    cs-uri-stem|contains: '/api/internal/diagnostics'
+  # (1) CVE-2025-29927: 내부 전용 헤더 위조. 정상 클라이언트는 이 헤더를 절대 보내지 않는다.
+  selection_bypass:
+    x-middleware-subrequest|contains: 'middleware'
+  # (2) command injection / IMDS 조회 페이로드(host 파라미터). privesc(sudo find) 요청도
+  #     주입 프리픽스의 ';' 로 함께 걸린다.
+  selection_payload:
+    req-host-param|contains:
+      - ';'
+      - '169.254.169.254'
+      - 'security-credentials'
+      - '/dev/null'
+      - '/etc/shadow'
+  condition: selection_endpoint and (selection_bypass or selection_payload)
+fields:
+  - c-ip
+  - cs-uri-stem
+  - req-host-param
+  - x-middleware-subrequest
+  - cs-user-agent
+falsepositives:
+  - 정상 진단 요청에 우연히 세미콜론이 포함되는 경우(드묾). x-middleware-subrequest는 정상 트래픽에 없어 오탐이 거의 없다.
+level: high
+tags:
+  - attack.initial_access
+  - attack.execution
+  - attack.privilege_escalation
+  - attack.credential_access
+  - attack.t1190
+  - attack.t1059.004
+  - attack.t1548.003
+  - attack.t1003.008
+  - attack.t1552.005
